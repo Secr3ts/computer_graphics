@@ -1,0 +1,14 @@
+{
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/mnt/u/E4/computer_graphics",
+            "binaryPath": "/mnt/u/E4/computer_graphics/triangle",
+            "binaryArgs": []
+        },
+        {
+            "cwd": "/mnt/u/E4/computer_graphics",
+            "binaryPath": "/mnt/u/E4/computer_graphics/transformations",
+            "binaryArgs": []
+        }
+    ]
+}

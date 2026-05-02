@@ -1,36 +1,37 @@
 CC=g++
 CFLAGS=-g -Wall
-LDFLAGS=-lGL -lglut -lGLU -lGLEW
+GLFW_LDFLAGS=-lGL -lGLEW -lglfw
+OBJDIR=obj
 
-binaries = testgpl triangle transformations modern
+binaries = final
 
 all: $(binaries)
 
-modern: modern.o glshader.o
-	$(CC) $^ -o $@ $(LDFLAGS)
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
 
-testgpl: testgpl.o
-	$(CC) $^ -o $@ $(LDFLAGS)
+final: $(OBJDIR)/final.o $(OBJDIR)/glshader.o $(OBJDIR)/vector3.o $(OBJDIR)/point3.o
+	$(CC) $^ -o $@ $(GLFW_LDFLAGS)
 
-triangle: triangle.o
-	$(CC) $^ -o $@ $(LDFLAGS)
-
-transformations: transformations.o
-	$(CC) $^ -o $@ $(LDFLAGS)
-
-# compile object files from same-dir sources
-%.o: %.cpp
+$(OBJDIR)/%.o: %.cpp | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# modern.o depends on modern.h and common headers
-modern.o: modern.cpp modern.h common/GLShader.h
-	$(CC) $(CFLAGS) -I. -Icommon -c modern.cpp -o modern.o
+$(OBJDIR)/final.o: final.cpp final.h common/GLShader.h common/stb_image.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -I. -Icommon -c final.cpp -o $@
 
-# glshader.o comes from common/
-glshader.o: common/GLShader.cpp common/GLShader.h
-	$(CC) $(CFLAGS) -I. -Icommon -c common/GLShader.cpp -o glshader.o
+$(OBJDIR)/glshader.o: common/GLShader.cpp common/GLShader.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -I. -Icommon -c common/GLShader.cpp -o $@
+
+$(OBJDIR)/vector3.o: common/Vector3.cpp common/Vector3.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -I. -Icommon -c common/Vector3.cpp -o $@
+
+$(OBJDIR)/point3.o: common/Point3.cpp common/Point3.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -I. -Icommon -c common/Point3.cpp -o $@
+
+$(OBJDIR)/final.o: final.cpp final.h common/GLShader.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -I. -Icommon -c final.cpp -o $@
 
 clean:
-	rm -f $(binaries) *.o common/*.o
+	rm -rf $(OBJDIR) $(binaries)
 
 .PHONY: all clean

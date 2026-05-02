@@ -141,23 +141,25 @@ bool GLShader::LoadFragmentShader(const char* filename)
 bool GLShader::Create()
 {
 	m_Program = glCreateProgram();
-	glAttachShader(m_Program, m_VertexShader);
-	glAttachShader(m_Program, m_GeometryShader);
-	glAttachShader(m_Program, m_FragmentShader);
+	if (m_VertexShader != 0) glAttachShader(m_Program, m_VertexShader);
+	if (m_GeometryShader != 0) glAttachShader(m_Program, m_GeometryShader);
+	if (m_FragmentShader != 0) glAttachShader(m_Program, m_FragmentShader);
 	glLinkProgram(m_Program);
 
-	return VerifyProgram();	
+	return VerifyProgram();
 }
 
 void GLShader::Destroy()
 {
-	glDetachShader(m_Program, m_VertexShader);
-	glDetachShader(m_Program, m_FragmentShader);
-	glDetachShader(m_Program, m_GeometryShader);
-	glDeleteShader(m_GeometryShader);
-	glDeleteShader(m_VertexShader);
-	glDeleteShader(m_FragmentShader);
-	glDeleteProgram(m_Program);
+	if (m_Program != 0) {
+		if (m_VertexShader != 0) glDetachShader(m_Program, m_VertexShader);
+		if (m_FragmentShader != 0) glDetachShader(m_Program, m_FragmentShader);
+		if (m_GeometryShader != 0) glDetachShader(m_Program, m_GeometryShader);
+	}
+	if (m_GeometryShader != 0) glDeleteShader(m_GeometryShader);
+	if (m_VertexShader != 0) glDeleteShader(m_VertexShader);
+	if (m_FragmentShader != 0) glDeleteShader(m_FragmentShader);
+	if (m_Program != 0) glDeleteProgram(m_Program);
 }
 
 // ---

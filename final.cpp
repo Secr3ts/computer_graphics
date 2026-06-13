@@ -377,6 +377,7 @@ void Render() {
   End();
 
   Begin("Data");
+  
   /* end of Imgui */
 
   /* beginning of camera update */

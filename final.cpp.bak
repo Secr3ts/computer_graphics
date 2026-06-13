@@ -1,0 +1,642 @@
+
+#include "common/GLShader.h"
+#include "common/Vector3.h"
+#include "common/stb_image.h"
+#include <GL/glew.h>
+#include <GL/gl.h>
+#include "final.h"
+#include <GLFW/glfw3.h>
+
+#include <GL/glext.h>
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+
+GLShader g_BasicShader;
+
+// Exercice 1.1
+// Column-order matrixes !
+float *matmul4x4(float *m1, float *m2) {
+
+  float *result = new float[16];
+  // We assume it's only 4x4 matrices.
+  for (int col = 0; col < 4; ++col) {
+    for (int row = 0; row < 4; ++row) {
+      result[col * 4 + row] = 0.0f;
+      for (int k = 0; k < 4; ++k) {
+        result[col * 4 + row] += m1[k * 4 + row] * m2[col * 4 + k];
+      }
+    }
+  }
+
+  return result;
+}
+
+static void printMatrix(const char *name, float *m) {
+  std::printf("%s =\n", name);
+  for (int r = 0; r < 4; ++r) {
+    for (int c = 0; c < 4; ++c) {
+      std::printf(" %9.5f", m[c * 4 + r]);
+    }
+    std::printf("\n");
+  }
+  std::printf("\n");
+}
+
+struct Color3f {
+  GLfloat r, g, b;
+  Color3f() : r(0.f), g(0.f), b(0.f) {}
+  Color3f(GLfloat _r, GLfloat _g, GLfloat _b) : r(_r), g(_g), b(_b) {}
+};
+
+GLFWwindow *g_Window = nullptr;
+
+// Buffers
+GLuint VBO;
+GLuint nVBO;
+GLuint tVBO;
+GLuint VAO;
+
+// Tex
+GLuint texID;
+// GLuint IBO;
+
+GLuint g_LocPosition = -1;
+GLuint g_LocNormal = -1;
+GLuint g_LocTexcoord = -1;
+
+GLuint g_uLocWorld = -1;
+GLuint g_uLocProj = -1;
+GLuint g_uLocView = -1;
+GLuint g_uLocViewPos = -1;
+GLuint g_uLocSampler = -1;
+
+const GLfloat cube_vertices[] = {
+    // front
+    -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0,
+    // back
+    -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, -1.0};
+
+const GLushort cube_elements[] = {
+    // front
+    0, 1, 2, 2, 3, 0,
+    // right
+    1, 5, 6, 6, 2, 1,
+    // back
+    7, 6, 5, 5, 4, 7,
+    // left
+    4, 0, 3, 3, 7, 4,
+    // bottom
+    4, 5, 1, 1, 0, 4,
+    // top
+    3, 2, 6, 6, 7, 3};
+
+Color3f cube_colors[] = {
+    Color3f(153.f / 255.f, 1.f, 51.f / 255.f),
+    Color3f(51.f / 255.f, 51.f / 255.f, 1.f),
+    Color3f(102.f / 255.f, 0.f, 204.f / 255.f),
+    Color3f(1.f, 0.f, 0.f),
+    Color3f(1.f, 1.f, 0.f),
+    Color3f(0.f, 1.f, 1.f),
+    Color3f(1.f, 1.f, 1.f),
+    Color3f(0.5f, 1.f, 1.f),
+};
+
+const GLfloat g_cube_vertices2[] = {  
+-1.0f,-1.0f,-1.0f, -1.0f,-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, // Left Side 
+-1.0f,-1.0f,-1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f,-1.0f, // Left Side  
+1.0f, 1.0f,-1.0f, -1.0f,-1.0f,-1.0f, -1.0f, 1.0f,-1.0f, // Back Side  
+1.0f,-1.0f, 1.0f, -1.0f,-1.0f,-1.0f, 1.0f,-1.0f,-1.0f, // Bottom Side  
+1.0f, 1.0f,-1.0f, 1.0f,-1.0f,-1.0f, -1.0f,-1.0f,-1.0f, // Back Side  
+1.0f,-1.0f, 1.0f, -1.0f,-1.0f, 1.0f, -1.0f,-1.0f,-1.0f, // Bottom Side  
+-1.0f, 1.0f, 1.0f, -1.0f,-1.0f, 1.0f, 1.0f,-1.0f, 1.0f, // Front Side  
+1.0f, 1.0f, 1.0f, 1.0f,-1.0f,-1.0f, 1.0f, 1.0f,-1.0f, // Right Side 
+1.0f,-1.0f,-1.0f, 1.0f, 1.0f, 1.0f, 1.0f,-1.0f, 1.0f, // Right Side  
+1.0f, 1.0f, 1.0f, 1.0f, 1.0f,-1.0f, -1.0f, 1.0f,-1.0f, // Top Side  
+1.0f, 1.0f, 1.0f, -1.0f, 1.0f,-1.0f, -1.0f, 1.0f, 1.0f, // Top Side  
+1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 1.0f,-1.0f, 1.0f, // Front Side
+};
+
+const GLfloat g_texcoords[] = {
+0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+};
+
+float *calculateNormals3() {
+  int vertices = sizeof(g_cube_vertices2) / sizeof(GLfloat);
+  float *result = new float[vertices];
+
+  for (int i = 0; i < vertices; i += 9) {
+    int stride = 3;
+    Point3<float> A = {g_cube_vertices2[i], g_cube_vertices2[i + 1],
+                       g_cube_vertices2[i + 2]};
+    Point3<float> B = {g_cube_vertices2[i + stride],
+                       g_cube_vertices2[i + stride + 1],
+                       g_cube_vertices2[i + stride + 2]};
+    Point3<float> C = {g_cube_vertices2[i + stride * 2],
+                       g_cube_vertices2[i + stride * 2 + 1],
+                       g_cube_vertices2[i + stride * 2 + 2]};
+
+    Vector3<float> AB(B.x - A.x, B.y - A.y, B.z - A.z);
+    Vector3<float> AC(C.x - A.x, C.y - A.y, C.z - A.z);
+
+    Vector3<float> N = AB.cross(AC);
+    N.normalize();
+
+    Point3<float> triCenter = {(A.x + B.x + C.x) / 3.0f,
+                               (A.y + B.y + C.y) / 3.0f,
+                               (A.z + B.z + C.z) / 3.0f};
+    Vector3<float> fromOrigin(triCenter.x, triCenter.y, triCenter.z);
+    if ((N * fromOrigin) < 0.0f) {
+      N = -N;
+    }
+
+    // assign same normal for each vertex of the triangle
+    for (int v = 0; v < 3; ++v) {
+      result[i + v * 3 + 0] = N.mX;
+      result[i + v * 3 + 1] = N.mY;
+      result[i + v * 3 + 2] = N.mZ;
+    }
+
+    printf("Normal for %d triangle: (%f, %f, %f)\n", i % 9, N.mX, N.mY, N.mZ);
+  }
+
+  return result;
+}
+
+float *LookAt(Vector3<float> position, Vector3<float> target,
+              Vector3<float> up) {
+  Vector3<float> forward = -(target - position);
+  forward.normalize();
+
+  Vector3<float> right = up.cross(forward);
+  right.normalize();
+
+  Vector3<float> upCorrected = forward.cross(right);
+  upCorrected.normalize();
+
+  float pos_right = position * right;
+  float pos_up = position * upCorrected;
+  float pos_for = position * forward;
+
+  float *view = new float[16]{right.mX,   upCorrected.mX, forward.mX, 0,
+                              right.mY,   upCorrected.mY, forward.mY, 0,
+                              right.mZ,   upCorrected.mZ, forward.mZ, 0,
+                              -pos_right, -pos_up,        -pos_for,   1};
+
+  return view;
+}
+
+// Global floats to controll Arcball camera
+float s_cameraRadius = 6.0f;
+float s_cameraPhi = 0.75f;
+float s_cameraTheta = 0.35f;
+Vector3<float> g_CameraTarget = {0.0f, 0.0f, 0.0f};
+Vector3<float> g_UpVector = {0.f, 1.f, 0.f};
+
+int g_lastMouseX = 0.f, g_lastMouseY = 0.f;
+bool g_isDragging = false;
+bool g_isSpacePressed = false;
+
+template <typename T> Vector3<T> toCartesian() {
+  float Y = s_cameraRadius * sinf(s_cameraTheta);
+  float X = s_cameraRadius * cosf(s_cameraTheta) * cosf(s_cameraPhi);
+  float Z = s_cameraRadius * cosf(s_cameraTheta) * sinf(s_cameraPhi);
+
+  return {X, Y, Z};
+}
+
+void updateWorldMatrix(float angleX = 0.0f, float angleY = 0.0f, float angleZ = 0.0f) {
+
+  float Rx[16] = {1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  cosf(angleX),
+                  -sinf(angleX),
+                  0,
+                  0,
+                  sinf(angleX),
+                  cosf(angleX),
+                  0,
+                  0,
+                  0,
+                  0,
+                  1};
+
+  float Ry[16] = {cosf(angleY), 0, -sinf(angleY), 0, 0, 1, 0, 0,
+                  sinf(angleY), 0, cosf(angleY),  0, 0, 0, 0, 1};
+
+  float Rz[16] = {cosf(angleZ),
+                  -sinf(angleZ),
+                  0,
+                  0,
+                  sinf(angleZ),
+                  cosf(angleZ),
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1};
+
+  float tx = 0.f, ty = 0.f, tz = 0.f;
+  float Tr[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1};
+
+  float *temp = matmul4x4(Rx, Ry);
+  float *combined = matmul4x4(Rz, temp);
+  float *final = matmul4x4(Tr, combined);
+
+  if (g_uLocWorld >= 0) {
+    glUniformMatrix4fv(g_uLocWorld, 1, GL_FALSE, final);
+    // printf("Uploaded world matrix to g_uLocWorld.\n");
+    // printMatrix("World Matrix", final);
+  }
+
+  delete[] final;
+  delete[] combined;
+  delete[] temp;
+}
+
+void updateViewMatrix() {
+  if (g_uLocView < 0) {
+    return;
+  }
+
+  Vector3<float> newCameraPosition = toCartesian<float>();
+  newCameraPosition += g_CameraTarget;
+
+  float *view = LookAt(newCameraPosition, g_CameraTarget, g_UpVector);
+
+  glUniformMatrix4fv(g_uLocView, 1, GL_FALSE, view);
+
+  if (g_uLocViewPos >= 0) {
+    glUniform3f(g_uLocViewPos, newCameraPosition.mX, newCameraPosition.mY,
+                newCameraPosition.mZ);
+  } 
+
+  delete[] view;
+}
+
+bool Initialize() {
+  // SHADER CREATION
+  printf("Loading shader from shaders/final.vert\n");
+  g_BasicShader.LoadVertexShader("shaders/final.vert");
+  g_BasicShader.LoadFragmentShader("shaders/final.frag");
+  g_BasicShader.Create();
+
+  if (g_BasicShader.GetProgram() == 0) {
+    fprintf(stderr, "Failed to create shader program\n");
+    return false;
+  } else {
+    fprintf(stdout, "Succeeded in creating shader program\n");
+  }
+
+  auto basicProgram = g_BasicShader.GetProgram();
+  // VARIOUS LOCATION
+
+  printf("Old g_LocPosition: %d\n", g_LocPosition);
+  g_LocPosition = glGetAttribLocation(basicProgram, "a_position");
+  printf("New g_LocPosition: %d\n", g_LocPosition);
+
+  printf("Old g_LocNormal: %d\n", g_LocNormal);
+  g_LocNormal = glGetAttribLocation(basicProgram, "a_normal");
+  printf("New g_LocNormal: %d\n", g_LocNormal);
+
+  printf("Old g_LocTexcoord: %d\n", g_LocTexcoord);
+  g_LocTexcoord = glGetAttribLocation(basicProgram, "a_texcoords");
+  printf("New g_LocTexcoord: %d\n", g_LocTexcoord);
+
+  printf("Old g_uLocWorld: %d\n", g_uLocWorld);
+  g_uLocWorld = glGetUniformLocation(basicProgram, "u_world");
+  printf("New g_uLocWorld: %d\n", g_uLocWorld);
+
+  printf("Old g_uLocProj: %d\n", g_uLocProj);
+  g_uLocProj = glGetUniformLocation(basicProgram, "u_proj");
+  printf("New g_uLocProj: %d\n", g_uLocProj);
+
+  printf("Old g_uLocView: %d\n", g_uLocView);
+  g_uLocView = glGetUniformLocation(basicProgram, "u_view");
+  printf("New g_uLocView: %d\n", g_uLocView);
+
+  printf("Old g_uLocViewPos: %d\n", g_uLocViewPos);
+  g_uLocViewPos = glGetUniformLocation(basicProgram, "u_viewPos");
+  printf("New g_uLocViewPos: %d\n", g_uLocViewPos);
+
+  printf("Old g_uLocSampler: %d\n", g_uLocSampler);
+  g_uLocSampler = glGetUniformLocation(basicProgram, "u_sampler");
+  printf("New g_uLocSampler: %d\n", g_uLocSampler);
+
+  if (g_LocPosition < 0 || g_uLocWorld < 0 || g_uLocProj < 0 ||
+      g_uLocView < 0 || g_uLocViewPos < 0 || g_LocTexcoord < 0 ||
+      g_uLocSampler < 0) {
+    printf("Missing attribute/uniform in .vert");
+    return false;
+  }
+
+  glUseProgram(basicProgram); // BIND PROGRAM BEFORE SETTING UNIFORMS
+  if (g_uLocSampler >= 0) {
+    glUniform1i(g_uLocSampler, 0);
+  }
+
+  glGenVertexArrays(1, &VAO);
+  glGenBuffers(1, &VBO);
+  glGenBuffers(1, &nVBO);
+  glGenBuffers(1, &tVBO);
+  glGenTextures(1, &texID);
+  // glGenBuffers(1, &IBO);
+
+  glBindVertexArray(VAO);
+
+  glBindTexture(GL_TEXTURE_2D, texID);
+  // Filtrage trilinéaire en minification et bilineaire en magnification 
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); 
+  // Si rien n’est specifie pour GL_TEXTURE_WRAP_* c’est GL_REPEAT par defaut 
+  int width, height, nrChannels;
+  unsigned char *data = stbi_load("images/tex1.jpg", &width, &height, &nrChannels, 0);
+  if (data) {
+    GLenum format = (nrChannels == 4) ? GL_RGBA : (nrChannels == 3) ? GL_RGB : GL_RED;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(data);
+    printf("Loaded texture: %d x %d (%d channels)\n", width, height, nrChannels);
+  } else {
+    fprintf(stderr, "Failed to load texture\n");
+    return false;
+  }
+
+  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(g_cube_vertices2), g_cube_vertices2,
+               GL_STATIC_DRAW);
+
+  // Set up vertex attribute for positions
+  if (g_LocPosition >= 0) {
+    glEnableVertexAttribArray(g_LocPosition);
+    glVertexAttribPointer(g_LocPosition, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
+    printf("Fed a_position to shader (location=%d)\n", (int)g_LocPosition);
+  }
+
+  updateWorldMatrix();
+
+  glBindBuffer(GL_ARRAY_BUFFER, nVBO);
+  float *g_cube_normals2 = calculateNormals3();
+  printMatrix("Extract of g_cube_normals2", g_cube_normals2);
+
+  glBufferData(GL_ARRAY_BUFFER, sizeof(g_cube_vertices2), g_cube_normals2,
+               GL_STATIC_DRAW);
+
+  if (g_LocNormal >= 0) {
+    glEnableVertexAttribArray(g_LocNormal);
+    glVertexAttribPointer(g_LocNormal, 3, GL_FLOAT, GL_FALSE, 0, (void *)0);
+    printf("Fed a_normal to shader (location=%d)\n", (int)(g_LocNormal));
+  }
+
+  glBindBuffer(GL_ARRAY_BUFFER, tVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(g_texcoords), g_texcoords, GL_STATIC_DRAW);
+  if (g_LocTexcoord >= 0) {
+    glEnableVertexAttribArray(g_LocTexcoord);
+    glVertexAttribPointer(g_LocTexcoord, 2, GL_FLOAT, GL_FALSE, 0, (void *)0);
+    printf("Fed a_texcoords to shader (location=%d)\n", (int)(g_LocTexcoord));
+  }
+
+  if (g_uLocView >= 0) {
+    float *view = LookAt(Vector3<float>(0.f, 0.f, -5.f), g_CameraTarget,
+                         Vector3<float>(0.f, 1.f, 0.f));
+    glUniformMatrix4fv(g_uLocView, 1, GL_FALSE, view);
+
+    printf("Uploaded view matrix to g_uLocView");
+    printMatrix("View Matrix", view);
+    delete[] view;
+  }
+
+  if (g_uLocProj >= 0) {
+    // 2 prochaines lignes générées par IA
+    float fovy_rad = 45.f * 3.14159265f / 180.f; // Convert to radians
+    float f = 1.0f / tanf(fovy_rad / 2.0f);      // ✓
+
+    float aspect = (float)W_WIDTH / (float)W_HEIGHT;
+    float far = 100.0f;
+    float near = 0.1f;
+    float proj[16] = {f / aspect,
+                      0,
+                      0,
+                      0,
+                      0,
+                      f,
+                      0,
+                      0,
+                      0,
+                      0,
+                      (far + near) / (near - far),
+                      -1,
+                      0,
+                      0,
+                      (2 * near * far) / (near - far),
+                      0};
+    glUniformMatrix4fv(g_uLocProj, 1, GL_FALSE, proj);
+    printf("Uploaded proj matrix to g_uLocProj");
+    printMatrix("Proj Matrix", proj);
+  }
+
+  updateViewMatrix();
+
+  // Unbind (unbind VAO first to preserve its buffer bindings)
+  glBindVertexArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+#ifdef WIN32
+  wglSwapIntervalEXT(1);
+#endif
+
+  glEnable(GL_DEPTH_TEST);
+  // glEnable(GL_CULL_FACE);
+  return true;
+}
+
+float angleX = 0.0f;
+float angleY = 0.0f;
+float angleZ = 0.0f;
+
+void Render() {
+  glUseProgram(g_BasicShader.GetProgram());
+  updateViewMatrix();
+
+  if (!g_isSpacePressed) {
+    angleX += 0.005f;
+    angleY = angleX - 0.001f;
+    angleZ = angleX + 0.002f;
+
+    updateWorldMatrix(angleX, angleY, angleZ);
+  }
+  
+  glViewport(0, 0, W_WIDTH, W_HEIGHT);
+
+  glClearColor(1.f, 1.f, 1.f, 1.f);
+
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texID);
+
+  glBindVertexArray(VAO);
+  glDrawArrays(GL_TRIANGLES, 0, sizeof(g_cube_vertices2) / sizeof(GLfloat) / 3);
+  glBindVertexArray(0);
+}
+
+void Display() {
+  Render();
+  glfwSwapBuffers(g_Window); // Swap from GLUT to GLFW
+}
+
+void Terminate() {
+  g_BasicShader.Destroy();
+  glDeleteBuffers(1, &VBO);
+  glDeleteBuffers(1, &nVBO);
+  glDeleteBuffers(1, &tVBO);
+  glDeleteTextures(1, &texID);
+  glDeleteVertexArrays(1, &VAO);
+  glfwDestroyWindow(g_Window);
+  glfwTerminate();
+}
+
+// Externs are needed to work with "static" keyword (AI suggested)
+extern float s_cameraPhi;
+extern float s_cameraRadius;
+extern float s_cameraTheta;
+
+static void cursor_position_callback(GLFWwindow *window, double xpos,
+                                     double ypos) {
+  (void)window;
+
+  int x = (int)xpos;
+  int y = (int)ypos;
+
+  if (!g_isDragging) {
+    g_lastMouseX = x;
+    g_lastMouseY = y;
+    return;
+  }
+
+  int dx = x - g_lastMouseX;
+  int dy = y - g_lastMouseY;
+
+  g_lastMouseX = x;
+  g_lastMouseY = y;
+
+  // Sensitivity needed otherwise camera just doesn't move
+  const float sensitivity = 0.01f;
+
+  s_cameraPhi += (float)dx * sensitivity;
+  s_cameraTheta -= (float)dy * sensitivity;
+  
+  // Clamping near "bornes" adds issues, add a small offset:
+  float off = 0.01f;
+
+  s_cameraPhi = std::clamp<float>(s_cameraPhi, -M_PI + off, M_PI - off);
+  s_cameraTheta =
+      std::clamp<float>(s_cameraTheta, -M_PI / 2 + off, M_PI / 2 - off);
+}
+
+static void mouse_button_callback(GLFWwindow *window, int button, int action,
+                                  int mods) {
+  (void)mods;
+
+  if (button != GLFW_MOUSE_BUTTON_LEFT) {
+    return;
+  }
+
+  g_isDragging = (action == GLFW_PRESS);
+
+  if (g_isDragging) {
+    double x = 0.0;
+    double y = 0.0;
+    glfwGetCursorPos(window, &x, &y);
+    g_lastMouseX = (int)x;
+    g_lastMouseY = (int)y;
+  }
+}
+
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+  (void)xoffset;
+  (void)window;
+
+  s_cameraRadius = std::max(5.f, s_cameraRadius - (float)yoffset * 0.3f);
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+  (void)window;
+  (void)scancode;
+  (void)mods;
+  //printf("Key: %d\n", key);
+  //printf("Action: %d\n", action);
+
+  if (key != GLFW_KEY_SPACE) {
+    return;
+  }
+
+  if (action == GLFW_PRESS) {
+    g_isSpacePressed = !g_isSpacePressed;
+  }
+}
+
+int main(int argc, char **argv) {
+  if (glfwInit() != GLFW_TRUE) {
+    fprintf(stderr, "Error initializing GLFW");
+    return EXIT_FAILURE;
+  }
+
+  // Hints suggested by AI
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+  glfwWindowHint(GLFW_DEPTH_BITS, 24);
+
+  g_Window = glfwCreateWindow(W_WIDTH, W_HEIGHT, "Arcball Navigation", nullptr,
+                              nullptr);
+
+  if (g_Window == nullptr) {
+    fprintf(stderr, "Error initializing Window");
+    glfwTerminate();
+    return EXIT_FAILURE;
+  }
+
+  glfwMakeContextCurrent(g_Window);
+  glfwSwapInterval(1);
+
+  if (GLEW_OK != glewInit()) {
+    fprintf(stderr, "Error initializing GLEW");
+    return EXIT_FAILURE;
+  }
+
+  glfwSetCursorPosCallback(g_Window, cursor_position_callback);
+  glfwSetMouseButtonCallback(g_Window, mouse_button_callback);
+  glfwSetScrollCallback(g_Window, scroll_callback);
+  glfwSetKeyCallback(g_Window, key_callback);
+
+  if (!Initialize()) {
+    fprintf(stderr, "Error Initializing program");
+    return EXIT_FAILURE;
+  }
+
+  while (!glfwWindowShouldClose(g_Window)) {
+    Render();
+    glfwSwapBuffers(g_Window);
+    glfwPollEvents();
+  }
+
+  Terminate();
+
+  return EXIT_SUCCESS;
+}
+

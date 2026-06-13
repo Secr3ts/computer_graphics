@@ -9,6 +9,11 @@
             "cwd": "/mnt/u/E4/computer_graphics",
             "binaryPath": "/mnt/u/E4/computer_graphics/transformations",
             "binaryArgs": []
+        },
+        {
+            "cwd": "/home/hex/e4/computer_graphics",
+            "binaryPath": "/home/hex/e4/computer_graphics/final",
+            "binaryArgs": []
         }
     ]
 }

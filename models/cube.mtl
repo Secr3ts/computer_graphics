@@ -1,0 +1,36 @@
+newmtl white
+Ka 0 0 0
+Kd 1 1 1
+Ks 0 0 0
+
+newmtl red
+Ka 0 0 0
+Kd 1 0 0
+Ks 0 0 0
+
+newmtl green
+Ka 0 0 0
+Kd 0 1 0
+Ks 0 0 0
+
+newmtl blue
+Ka 0 0 0
+Kd 0 0 1
+Ks 0 0 0
+
+newmtl light
+Ka 20 20 20
+Kd 1 1 1
+Ks 0 0 0
+
+newmtl brass
+Ka 0.3294 0.2235 0.275
+Kd 0.7804 0.5686 0.1137
+Ks 0.9922 0.9412 0.8078
+Ns 83.2
+
+newmtl obsidian
+Ka 0.05 0.05 0.05
+Kd 0.02 0.02 0.02
+Ks 0.90 0.90 0.90
+Ns 300.0

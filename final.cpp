@@ -7,6 +7,7 @@
 #include <GL/glext.h>
 #include <GLFW/glfw3.h>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <glm/mat3x3.hpp>
 #include <cstdlib>
 #include <iostream>
@@ -100,8 +101,9 @@ bool Initialize() {
     model->Load("./models/cube.obj", "./models", mtls[model_i]);
     model->LoadShader("./shaders/", "hemis");
 
-    vector<glm::mat4> instance_transforms;
-    instance_transforms.reserve(std::size(positions));
+    vector<InstanceData> instances;
+    instances.reserve(std::size(positions));
+    InstanceData base_instance = model->instance_data.empty() ? InstanceData{} : model->instance_data[0];
     for (size_t inst_i = 0; inst_i < std::size(positions); inst_i++) {
       glm::mat4 instance = glm::mat4(1.0f);
       instance = glm::translate(instance, positions[inst_i]);
@@ -111,11 +113,13 @@ bool Initialize() {
       float model_offset = (static_cast<float>(model_i) - 1.0f) * 3.0f;
       instance = glm::translate(instance, glm::vec3(0.0f, 0.0f, model_offset));
 
-      instance_transforms.push_back(instance);
+      InstanceData inst_data = base_instance;
+      inst_data.m_matrix = instance;
+      inst_data.m_shine = 83.2f;
+      instances.push_back(inst_data);
     }
 
-    model->SetInstanceTransforms(instance_transforms);
-    model->Ns = 83.2f;
+    model->SetInstanceData(instances);
     model->Upload();
     models.push_back(model);
   }
@@ -370,14 +374,30 @@ void Render() {
   ImGui::NewFrame();
   // ImGui::ShowDemoWindow(); // Show demo window! :)
   using namespace ImGui;
+  
+  /* Camera control window */
   Begin("Controls");
   SliderFloat("Theta", &camera.theta, -360.f, 360.f);
   SliderFloat("Phi", &camera.phi, -89.0f, 89.0f);
   SliderFloat("Zoom", &camera.zoom, -1.0f, 45.0f * 2.f);
   End();
 
-  Begin("Data");
-  
+  /* Material control blocks*/
+  int i = 1;
+  for (Model* model: models) {
+    std::string name = "Model " + std::to_string(i);
+    Begin(name.c_str());
+
+    for (InstanceData child: model->instance_data) {
+      std::string c_name =  name + std::to_string(*value_ptr(child.m_matrix));
+      BeginChild(c_name.c_str());
+      
+      EndChild();
+    }
+    End();
+    i++;
+  }
+
   /* end of Imgui */
 
   /* beginning of camera update */

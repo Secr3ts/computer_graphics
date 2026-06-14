@@ -22,31 +22,20 @@ using namespace tinyobj;
 using namespace glm;
 
 /* beginning of instance helper */
-static InstanceData MakeDefaultInstance(const float Ka[3], const float Kd[3],
-                                        const float Ks[3], float Ns) {
+static InstanceData MakeDefaultInstance() {
   InstanceData data{};
   data.m_matrix = mat4(1.0f);
   data.m_matrix = translate(data.m_matrix, vec3(-1.0f, -1.0f, -1.0f));
-  data.m_amb = vec3(Ka[0], Ka[1], Ka[2]);
-  data.m_dif = vec3(Kd[0], Kd[1], Kd[2]);
-  data.m_spec = vec3(Ks[0], Ks[1], Ks[2]);
-  data.m_shine = Ns;
+  data.m_amb = vec3(0.1f, 0.1f, 0.1f);
+  data.m_dif = vec3(1.0f, 1.0f, 1.0f);
+  data.m_spec = vec3(0.2f, 0.2f, 0.2f);
+  data.m_shine = 32.0f;
   return data;
 }
 /* end of instance helper */
 
-Model::Model(void) : instances(1), Ns(32.0f), VAO(0), VBO(0), EBO(0), iVBO(0) {
-  Ka[0] = 0.1f;
-  Ka[1] = 0.1f;
-  Ka[2] = 0.1f;
-  Kd[0] = 1.0f;
-  Kd[1] = 1.0f;
-  Kd[2] = 1.0f;
-  Ks[0] = 0.2f;
-  Ks[1] = 0.2f;
-  Ks[2] = 0.2f;
-
-  instance_data.push_back(MakeDefaultInstance(Ka, Kd, Ks, Ns));
+Model::Model(void) : instances(1), VAO(0), VBO(0), EBO(0), iVBO(0) {
+  instance_data.push_back(MakeDefaultInstance());
 }
 
 Model::~Model(void) {}
@@ -77,6 +66,7 @@ void Model::Load(string obj,string mtl,string mtl_name) {
   const bool hasNormals = !attrib.normals.empty();
 
   if (!materials.empty()) {
+    InstanceData loaded = instance_data.empty() ? MakeDefaultInstance() : instance_data[0];
     material_t material;
 
     if (mtl_name.empty())
@@ -98,24 +88,20 @@ void Model::Load(string obj,string mtl,string mtl_name) {
       }
     }
 
-    Ka[0] = material.ambient[0];
-    Ka[1] = material.ambient[1];
-    Ka[2] = material.ambient[2];
-    Kd[0] = material.diffuse[0];
-    Kd[1] = material.diffuse[1];
-    Kd[2] = material.diffuse[2];
-    Ks[0] = material.specular[0];
-    Ks[1] = material.specular[1];
-    Ks[2] = material.specular[2];
-    Ns = material.shininess;
+    SetMaterial(&loaded, material);
 
     // Some teaching .mtl files set Ka to zero, which can make the model
     // appear fully black when normals/light are imperfect.
-    if (Ka[0] == 0.0f && Ka[1] == 0.0f && Ka[2] == 0.0f) {
-      Ka[0] = 0.2f * (Kd[0] > 0.0f ? Kd[0] : 1.0f);
-      Ka[1] = 0.2f * (Kd[1] > 0.0f ? Kd[1] : 1.0f);
-      Ka[2] = 0.2f * (Kd[2] > 0.0f ? Kd[2] : 1.0f);
+    if (loaded.m_amb.x == 0.0f && loaded.m_amb.y == 0.0f && loaded.m_amb.z == 0.0f) {
+      loaded.m_amb.x = 0.2f * (loaded.m_dif.x > 0.0f ? loaded.m_dif.x : 1.0f);
+      loaded.m_amb.y = 0.2f * (loaded.m_dif.y > 0.0f ? loaded.m_dif.y : 1.0f);
+      loaded.m_amb.z = 0.2f * (loaded.m_dif.z > 0.0f ? loaded.m_dif.z : 1.0f);
     }
+
+    for (size_t i = 0; i < instance_data.size(); ++i) {
+      SetMaterial(&instance_data[i], material);
+    }
+
   }
 
   for (size_t s = 0; s < shapes.size(); s++) {
@@ -205,20 +191,20 @@ void Model::Load(string obj,string mtl,string mtl_name) {
   /* end of obj loading */
 }
 
+void Model::SetMaterial(InstanceData* instance, tinyobj::material_t material)
+{
+  instance->m_amb = vec3(material.ambient[0], material.ambient[1], material.ambient[2]);
+  instance->m_dif = vec3(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
+  instance->m_spec = vec3(material.specular[0], material.specular[1], material.specular[2]);
+  instance->m_shine = material.shininess;
+}
+
 void Model::Upload() {
   /* beginning of gpu upload */
   GenerateBuffers();
 
   if (instance_data.empty()) {
-    instance_data.push_back(MakeDefaultInstance(Ka, Kd, Ks, Ns));
-  }
-
-  // Keep legacy material fields reflected in the per-instance payload.
-  for (size_t i = 0; i < instance_data.size(); ++i) {
-    instance_data[i].m_amb = vec3(Ka[0], Ka[1], Ka[2]);
-    instance_data[i].m_dif = vec3(Kd[0], Kd[1], Kd[2]);
-    instance_data[i].m_spec = vec3(Ks[0], Ks[1], Ks[2]);
-    instance_data[i].m_shine = Ns;
+    instance_data.push_back(MakeDefaultInstance());
   }
 
   instances = instance_data.size();
@@ -295,15 +281,12 @@ void Model::GenerateBuffers() {
 
 void Model::SetInstanceTransforms(const vector<mat4> &transforms) {
   if (transforms.empty()) {
-    instance_data.assign(1, MakeDefaultInstance(Ka, Kd, Ks, Ns));
+    instance_data.assign(1, MakeDefaultInstance());
   } else {
-    instance_data.resize(transforms.size());
+    InstanceData base = instance_data.empty() ? MakeDefaultInstance() : instance_data[0];
+    instance_data.resize(transforms.size(), base);
     for (size_t i = 0; i < transforms.size(); ++i) {
       instance_data[i].m_matrix = transforms[i];
-      instance_data[i].m_amb = vec3(Ka[0], Ka[1], Ka[2]);
-      instance_data[i].m_dif = vec3(Kd[0], Kd[1], Kd[2]);
-      instance_data[i].m_spec = vec3(Ks[0], Ks[1], Ks[2]);
-      instance_data[i].m_shine = Ns;
     }
   }
 
@@ -319,26 +302,12 @@ void Model::SetInstanceTransforms(const vector<mat4> &transforms) {
 
 void Model::SetInstanceData(const vector<InstanceData> &data) {
   if (data.empty()) {
-    instance_data.assign(1, MakeDefaultInstance(Ka, Kd, Ks, Ns));
+    instance_data.assign(1, MakeDefaultInstance());
   } else {
     instance_data = data;
   }
 
   instances = instance_data.size();
-
-  if (!instance_data.empty()) {
-    const InstanceData &first = instance_data[0];
-    Ka[0] = first.m_amb.x;
-    Ka[1] = first.m_amb.y;
-    Ka[2] = first.m_amb.z;
-    Kd[0] = first.m_dif.x;
-    Kd[1] = first.m_dif.y;
-    Kd[2] = first.m_dif.z;
-    Ks[0] = first.m_spec.x;
-    Ks[1] = first.m_spec.y;
-    Ks[2] = first.m_spec.z;
-    Ns = first.m_shine;
-  }
 
   if (iVBO != 0) {
     glBindBuffer(GL_ARRAY_BUFFER, iVBO);
@@ -375,14 +344,17 @@ void Model::Draw(const mat4 &viewMtx, const mat4 &projMtx, const vec3 &cameraPos
   if (locLCol >= 0)
     glUniform3f(locLCol, 1.0f, 1.0f, 1.0f);
 
-  if (locKA >= 0)
-    glUniform3f(locKA, Ka[0], Ka[1], Ka[2]);
-  if (locKD >= 0)
-    glUniform3f(locKD, Kd[0], Kd[1], Kd[2]);
-  if (locKS >= 0)
-    glUniform3f(locKS, Ks[0], Ks[1], Ks[2]);
-  if (locNS >= 0)
-    glUniform1f(locNS, Ns > 0.0f ? Ns : 32.0f);
+  if (!instance_data.empty()) {
+    const InstanceData &first = instance_data[0];
+    if (locKA >= 0)
+      glUniform3f(locKA, first.m_amb.x, first.m_amb.y, first.m_amb.z);
+    if (locKD >= 0)
+      glUniform3f(locKD, first.m_dif.x, first.m_dif.y, first.m_dif.z);
+    if (locKS >= 0)
+      glUniform3f(locKS, first.m_spec.x, first.m_spec.y, first.m_spec.z);
+    if (locNS >= 0)
+      glUniform1f(locNS, first.m_shine > 0.0f ? first.m_shine : 32.0f);
+  }
 
   if (locUseTex >= 0)
     glUniform1i(locUseTex, 0);
@@ -444,7 +416,7 @@ void Model::Tr(vec3 offset)
 {
   /* beginning of first-instance translation */
   if (instance_data.empty()) {
-    instance_data.push_back(MakeDefaultInstance(Ka, Kd, Ks, Ns));
+    instance_data.push_back(MakeDefaultInstance());
   }
 
   instance_data[0].m_matrix = translate(instance_data[0].m_matrix, offset);
@@ -455,7 +427,7 @@ void Model::Sc(vec3 offset)
 {
   /* beginning of first-instance scaling */
   if (instance_data.empty()) {
-    instance_data.push_back(MakeDefaultInstance(Ka, Kd, Ks, Ns));
+    instance_data.push_back(MakeDefaultInstance());
   }
 
   instance_data[0].m_matrix = scale(instance_data[0].m_matrix, offset);

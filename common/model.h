@@ -6,6 +6,7 @@
 #include <string>
 #include <sys/types.h>
 #include <vector>
+#include "tiny_obj_loader.h"
 
 #ifndef LOADER_H
 #define LOADER_H
@@ -32,14 +33,10 @@ public:
   vector<Vertex> vertices;
   vector<uint> indices;
   vector<InstanceData> instance_data;
-  
+  vector<tinyobj::material_t> materials;
+
   string name;
   size_t instances;
-
-  float Ka[3]; // ambient
-  float Kd[3]; // diffusion
-  float Ks[3]; // specular
-  float Ns; // shininess
 
   GLuint VAO;
   GLuint VBO;
@@ -53,9 +50,13 @@ public:
 
   void Load(string obj,string mtl = "./", string mtl_name = "");
   void LoadShader(string path, string name);
+  
   void Upload();
+  
   void SetInstanceTransforms(const vector<mat4> &transforms);
   void SetInstanceData(const vector<InstanceData> &data);
+  void SetMaterial(InstanceData* instance, tinyobj::material_t material);
+  
   void Draw(const mat4 &viewMtx, const mat4 &projMtx, const vec3 &cameraPos);
 
   // ALWAYS USE Sc, THEN Tr.

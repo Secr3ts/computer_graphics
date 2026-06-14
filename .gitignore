@@ -3,3 +3,5 @@ testgpl
 triangle
 transformations
 modern
+build/
+imgui.ini

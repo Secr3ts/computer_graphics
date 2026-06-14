@@ -54,8 +54,10 @@ public:
   void Upload();
   
   void SetInstanceTransforms(const vector<mat4> &transforms);
+  void SetInstanceTransforms(InstanceData* instance, const vector<mat4> &transforms);
   void SetInstanceData(const vector<InstanceData> &data);
-  void SetMaterial(InstanceData* instance, tinyobj::material_t material);
+
+  void SetMaterial(InstanceData* instance, const tinyobj::material_t &material);
   
   void Draw(const mat4 &viewMtx, const mat4 &projMtx, const vec3 &cameraPos);
 

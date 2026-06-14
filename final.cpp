@@ -11,6 +11,8 @@
 #include <glm/mat3x3.hpp>
 #include <cstdlib>
 #include <iostream>
+#include <random>
+#include <string>
 #include "common/stb_image.h"
 
 /* IMGui*/
@@ -388,12 +390,57 @@ void Render() {
     std::string name = "Model " + std::to_string(i);
     Begin(name.c_str());
 
-    for (InstanceData child: model->instance_data) {
-      std::string c_name =  name + std::to_string(*value_ptr(child.m_matrix));
-      BeginChild(c_name.c_str());
-      
-      EndChild();
+    if (model->materials.empty()) {
+      TextUnformatted("No materials found for this model.");
     }
+
+    if (BeginCombo("All instances", "Select material")) {
+      for (const tinyobj::material_t &material : model->materials) {
+        const char *materialName = material.name.empty() ? "<unnamed>" : material.name.c_str();
+        if (Selectable(materialName)) {
+          for (InstanceData &data : model->instance_data) {
+            model->SetMaterial(&data, material);
+          }
+        }
+      }
+      EndCombo();
+    }
+
+    Separator();
+
+    for (size_t j = 0; j < model->instance_data.size(); ++j) {
+      InstanceData &child = model->instance_data[j];
+      PushID(static_cast<int>(j));
+
+      std::string instanceLabel = "Instance " + std::to_string(j + 1);
+      if (BeginCombo(instanceLabel.c_str(), "Select material")) {
+        for (const tinyobj::material_t &material : model->materials) {
+          const char *materialName = material.name.empty() ? "<unnamed>" : material.name.c_str();
+          if (Selectable(materialName)) {
+            model->SetMaterial(&child, material);
+          }
+        }
+        EndCombo();
+      }
+
+      PopID();
+    }
+
+    Separator();
+
+    if (Button("Random material")) {
+      // https://cpppatterns.com/patterns/choose-random-element.html
+      for (InstanceData &data: model->instance_data) { 
+        std::random_device random_device;
+        std::mt19937 engine{random_device()};
+        std::uniform_int_distribution<int> dist(0, model->materials.size() - 1);
+        
+        tinyobj::material_t random_element = model->materials[dist(engine)]; 
+
+        model->SetMaterial(&data, random_element);
+      }
+    }
+
     End();
     i++;
   }

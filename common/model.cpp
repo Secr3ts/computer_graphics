@@ -62,7 +62,7 @@ void Model::Load(string obj,string mtl,string mtl_name) {
 
   auto &attrib = reader.GetAttrib();
   auto &shapes = reader.GetShapes();
-  auto &materials = reader.GetMaterials();
+  materials = reader.GetMaterials();
   const bool hasNormals = !attrib.normals.empty();
 
   if (!materials.empty()) {
@@ -191,12 +191,20 @@ void Model::Load(string obj,string mtl,string mtl_name) {
   /* end of obj loading */
 }
 
-void Model::SetMaterial(InstanceData* instance, tinyobj::material_t material)
+void Model::SetMaterial(InstanceData* instance, const tinyobj::material_t &material)
 {
   instance->m_amb = vec3(material.ambient[0], material.ambient[1], material.ambient[2]);
   instance->m_dif = vec3(material.diffuse[0], material.diffuse[1], material.diffuse[2]);
   instance->m_spec = vec3(material.specular[0], material.specular[1], material.specular[2]);
   instance->m_shine = material.shininess;
+
+  if (iVBO != 0 && !instance_data.empty()) {
+    instances = instance_data.size();
+    glBindBuffer(GL_ARRAY_BUFFER, iVBO);
+    glBufferData(GL_ARRAY_BUFFER, instances * sizeof(InstanceData),
+                 instance_data.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+  }
 }
 
 void Model::Upload() {

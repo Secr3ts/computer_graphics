@@ -54,7 +54,7 @@ bool Initialize() {
     return EXIT_FAILURE;
   }
 
-  window = glfwCreateWindow(APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, "Arcball Navigation", nullptr,
+  window = glfwCreateWindow(APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, "3d final", nullptr,
                             nullptr);
   if (window == nullptr) {
     fprintf(stderr, "Error initializing Window");
@@ -94,19 +94,25 @@ bool Initialize() {
 
   /* beginning of model and instance initialization */
   const vector<string> mtls = {
-      "obsidian",
-      "brass",
-      "green",
+      "Material.001",
+      "Material.001",
+      "Material.001",
   };
   for (size_t model_i = 0; model_i < mtls.size(); model_i++) {
     Model *model = new Model();
-    model->Load("./models/cube.obj", "./models", mtls[model_i]);
+    if (model_i == 0) {
+      model->Load("./models/untitled.obj", "./models");
+    } else if (model_i == 1) {
+      model->Load("./models/cube.obj", "./models");
+    } else {
+      model->Load("./models/untitled.obj", "./models");
+    }
     model->LoadShader("./shaders/", "hemis");
 
     vector<InstanceData> instances;
     instances.reserve(std::size(positions));
     InstanceData base_instance = model->instance_data.empty() ? InstanceData{} : model->instance_data[0];
-    for (size_t inst_i = 0; inst_i < std::size(positions); inst_i++) {
+    for (size_t inst_i = 0; inst_i < std::size(positions) - 1; inst_i++) {
       glm::mat4 instance = glm::mat4(1.0f);
       instance = glm::translate(instance, positions[inst_i]);
       instance = glm::scale(instance, glm::vec3(0.30f + (0.05 * inst_i)));
@@ -128,6 +134,7 @@ bool Initialize() {
   /* end of model and instance initialization */
 
   /* beginning of skybox initialization */
+  /* 
   vector<string> faces = {
     "./images/cubemap/pisa_posx.jpg",
     "./images/cubemap/pisa_negx.jpg",
@@ -136,6 +143,28 @@ bool Initialize() {
     "./images/cubemap/pisa_posz.jpg",
     "./images/cubemap/pisa_negz.jpg",
   };
+  */
+
+  /*
+  vector<string> faces = {
+    "./images/cubemap/px.png",
+    "./images/cubemap/nx.png",
+    "./images/cubemap/py.png",
+    "./images/cubemap/ny.png",
+    "./images/cubemap/pz.png",
+    "./images/cubemap/nz.png"
+  };
+  */
+
+  vector<string> faces = {
+    "./images/cubemap/px1.png",
+    "./images/cubemap/nx1.png",
+    "./images/cubemap/py1.png",
+    "./images/cubemap/ny1.png",
+    "./images/cubemap/pz1.png",
+    "./images/cubemap/nz1.png"
+  };
+  
   tex_id = LoadCubemap(faces);
 
   skybox_shader_id.LoadVertexShader("./shaders/skybox.vert");
@@ -174,7 +203,7 @@ bool Initialize() {
   glBindVertexArray(0);
   /* end of skybox initialization */
 
-  /* beginning of procedural texture initialization */
+  /* beginning of procedural texture initialization
   glGenTextures(1, &tex_id_2);
   glBindTexture(GL_TEXTURE_2D, tex_id_2);
   
@@ -197,7 +226,7 @@ bool Initialize() {
                     (GLuint)((PROC_TEX_HEIGHT + 15) / 16), 1);
   glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
   glUseProgram(0);
-  /* end of procedural texture initialization */
+   end of procedural texture initialization */
 
   /* beginning of framebuffer initialization */
   glEnable(GL_DEPTH_TEST);

@@ -21,6 +21,7 @@ set(SOURCES
     common/Point3.cpp
     common/camera.cpp
     common/model.cpp
+    common/skybox.cpp
 )
 
 # ImGui sources
@@ -64,3 +65,5 @@ add_custom_command(TARGET final POST_BUILD
         ${CMAKE_SOURCE_DIR}/shaders
         $<TARGET_FILE_DIR:final>/shaders
 )
+
+configure_file(${CMAKE_SOURCE_DIR}/imgui.ini ${CMAKE_SOURCE_DIR}/imgui.ini COPYONLY)

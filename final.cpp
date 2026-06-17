@@ -1,24 +1,25 @@
 #include <GL/glew.h>
+#include "final.h"
+#include "common/GLShader.h"
 #include "common/camera.h"
 #include "common/model.h"
+#include "common/skybox.h"
+#include "common/stb_image.h"
 #include <GL/gl.h>
-#include "common/GLShader.h"
-#include "final.h"
 #include <GL/glext.h>
 #include <GLFW/glfw3.h>
+#include <cstdlib>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/mat3x3.hpp>
-#include <cstdlib>
 #include <iostream>
 #include <random>
 #include <string>
-#include "common/stb_image.h"
 
 /* IMGui*/
-#include "common/imgui/imgui.h"
 #include "common/imgui/backends/imgui_impl_glfw.h"
 #include "common/imgui/backends/imgui_impl_opengl3.h"
+#include "common/imgui/imgui.h"
 
 GLuint fbo_1;
 GLuint color_tex_1;
@@ -27,7 +28,6 @@ GLuint depth_tex_1;
 GLuint fbo_2;
 GLuint color_tex_2;
 
-GLuint tex_id; // cubemap (skybox)
 GLuint tex_id_2; // perlin noise procedural
 
 constexpr int PROC_TEX_WIDTH = 512;
@@ -37,15 +37,18 @@ GLuint quand_VAO, quadVBO;
 
 GLShader blur_shader_id;
 GLShader sepia_shaper_id;
-GLShader skybox_shader_id;
 GLComputeShader procedural_shader_id;
-GLuint skybox_VAO;
-GLuint skybox_VBO;
 
 GLFWwindow *window;
+
 vector<Model *> models;
 
 Camera camera;
+
+Skybox skybox;
+
+float blur_strength = 1.2f;
+float sepia_intensity = 0.5f;
 
 bool Initialize() {
   /* beginning of window initialization */
@@ -54,8 +57,8 @@ bool Initialize() {
     return EXIT_FAILURE;
   }
 
-  window = glfwCreateWindow(APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, "3d final", nullptr,
-                            nullptr);
+  window = glfwCreateWindow(APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, "3d final",
+                            nullptr, nullptr);
   if (window == nullptr) {
     fprintf(stderr, "Error initializing Window");
     glfwTerminate();
@@ -83,7 +86,7 @@ bool Initialize() {
   const glm::vec3 positions[3] = {glm::vec3(-1.6f, 0.0f, 0.0f),
                                   glm::vec3(0.0f, 0.0f, 0.0f),
                                   glm::vec3(1.6f, 0.0f, 0.0f)};
-  
+
   /*
     const glm::vec3 colors[3] = {
         glm::vec3(0.95f, 0.30f, 0.30f),
@@ -111,7 +114,8 @@ bool Initialize() {
 
     vector<InstanceData> instances;
     instances.reserve(std::size(positions));
-    InstanceData base_instance = model->instance_data.empty() ? InstanceData{} : model->instance_data[0];
+    InstanceData base_instance =
+        model->instance_data.empty() ? InstanceData{} : model->instance_data[0];
     for (size_t inst_i = 0; inst_i < std::size(positions) - 1; inst_i++) {
       glm::mat4 instance = glm::mat4(1.0f);
       instance = glm::translate(instance, positions[inst_i]);
@@ -134,79 +138,53 @@ bool Initialize() {
   /* end of model and instance initialization */
 
   /* beginning of skybox initialization */
-  /* 
-  vector<string> faces = {
-    "./images/cubemap/pisa_posx.jpg",
-    "./images/cubemap/pisa_negx.jpg",
-    "./images/cubemap/pisa_posy.jpg",
-    "./images/cubemap/pisa_negy.jpg",
-    "./images/cubemap/pisa_posz.jpg",
-    "./images/cubemap/pisa_negz.jpg",
+
+  vector<string> faces1 = {
+      "./images/cubemap/pisa_posx.jpg", "./images/cubemap/pisa_negx.jpg",
+      "./images/cubemap/pisa_posy.jpg", "./images/cubemap/pisa_negy.jpg",
+      "./images/cubemap/pisa_posz.jpg", "./images/cubemap/pisa_negz.jpg",
   };
-  */
+  std::string name1 = "pisa";
 
-  /*
-  vector<string> faces = {
-    "./images/cubemap/px.png",
-    "./images/cubemap/nx.png",
-    "./images/cubemap/py.png",
-    "./images/cubemap/ny.png",
-    "./images/cubemap/pz.png",
-    "./images/cubemap/nz.png"
-  };
-  */
+  vector<string> faces2 = {
+      "./images/cubemap/px.png", "./images/cubemap/nx.png",
+      "./images/cubemap/py.png", "./images/cubemap/ny.png",
+      "./images/cubemap/pz.png", "./images/cubemap/nz.png"};
+  std::string name2 = "air";
 
-  vector<string> faces = {
-    "./images/cubemap/px1.png",
-    "./images/cubemap/nx1.png",
-    "./images/cubemap/py1.png",
-    "./images/cubemap/ny1.png",
-    "./images/cubemap/pz1.png",
-    "./images/cubemap/nz1.png"
-  };
-  
-  tex_id = LoadCubemap(faces);
+  vector<string> faces3 = {
+      "./images/cubemap/px1.png", "./images/cubemap/nx1.png",
+      "./images/cubemap/py1.png", "./images/cubemap/ny1.png",
+      "./images/cubemap/pz1.png", "./images/cubemap/nz1.png"};
+  std::string name3 = "room_test";
 
-  skybox_shader_id.LoadVertexShader("./shaders/skybox.vert");
-  skybox_shader_id.LoadFragmentShader("./shaders/skybox.frag");
-  skybox_shader_id.Create();
+  vector<string> faces4 = {
+      "./images/cubemap/px2.png", "./images/cubemap/nx2.png",
+      "./images/cubemap/py2.png", "./images/cubemap/ny2.png",
+      "./images/cubemap/pz2.png", "./images/cubemap/nz2.png"};
+  std::string name4 = "outdoor";
 
-  float skybox_vertices[] = {
-      -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f,
-      1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f,
+  vector<string> faces5 = {
+      "./images/cubemap/test_px.png", "./images/cubemap/test_nx.png",
+      "./images/cubemap/test_py.png", "./images/cubemap/test_ny.png",
+      "./images/cubemap/test_pz.png", "./images/cubemap/test_nz.png"};
+  std::string name5 = "test";
 
-      -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f,
-      -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,
-
-      1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,
-      1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f,
-
-      -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
-      1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,
-
-      -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,
-      1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f,
-
-      -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f,
-      1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,
-  };
-
-  glGenVertexArrays(1, &skybox_VAO);
-  glGenBuffers(1, &skybox_VBO);
-  glBindVertexArray(skybox_VAO);
-  glBindBuffer(GL_ARRAY_BUFFER, skybox_VBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(skybox_vertices), &skybox_vertices,
-               GL_STATIC_DRAW);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float),
-                        (void *)0);
-  glBindVertexArray(0);
+  skybox.SetCamera(&camera);
+  skybox.AddCubemap(name1, faces1);
+  skybox.AddCubemap(name2, faces2);
+  skybox.AddCubemap(name3, faces3);
+  skybox.AddCubemap(name4, faces4);
+  skybox.AddCubemap(name5, faces5);
+  skybox.GenerateBuffers();
+  skybox.Init("./shaders/", "skybox");
+  skybox.ChangeCubeMap(name1);
   /* end of skybox initialization */
 
-  /* beginning of procedural texture initialization
+  /* beginning of procedural texture initialization */
   glGenTextures(1, &tex_id_2);
   glBindTexture(GL_TEXTURE_2D, tex_id_2);
-  
+
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, PROC_TEX_WIDTH, PROC_TEX_HEIGHT,
                0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -226,7 +204,7 @@ bool Initialize() {
                     (GLuint)((PROC_TEX_HEIGHT + 15) / 16), 1);
   glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
   glUseProgram(0);
-   end of procedural texture initialization */
+  /* end of procedural texture initialization */
 
   /* beginning of framebuffer initialization */
   glEnable(GL_DEPTH_TEST);
@@ -237,8 +215,8 @@ bool Initialize() {
 
   glGenTextures(1, &color_tex_1);
   glBindTexture(GL_TEXTURE_2D, color_tex_1);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, 0, GL_RGB,
-               GL_UNSIGNED_BYTE, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, 0,
+               GL_RGB, GL_UNSIGNED_BYTE, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
@@ -246,8 +224,8 @@ bool Initialize() {
 
   glGenTextures(1, &depth_tex_1);
   glBindTexture(GL_TEXTURE_2D, depth_tex_1);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, 0,
-               GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, APP_WINDOW_WIDTH,
+               APP_WINDOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
@@ -259,8 +237,8 @@ bool Initialize() {
 
   glGenTextures(1, &color_tex_2);
   glBindTexture(GL_TEXTURE_2D, color_tex_2);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, 0, GL_RGB,
-               GL_UNSIGNED_BYTE, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, APP_WINDOW_WIDTH, APP_WINDOW_HEIGHT, 0,
+               GL_RGB, GL_UNSIGNED_BYTE, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
@@ -288,20 +266,25 @@ bool Initialize() {
 
   /* beginning of camera callback initialization */
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-  //glfwSetCursorPosCallback(window, mouse_callback);
-  // glfwSetScrollCallback(window, scroll_callback);
+  // glfwSetCursorPosCallback(window, mouse_callback);
+  //  glfwSetScrollCallback(window, scroll_callback);
   /* end of camera callback initialization */
-  
+
   /* beginning of IMGUI Init */
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
-  ImGuiIO& io = ImGui::GetIO();
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls 
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-  // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
+  ImGuiIO &io = ImGui::GetIO();
+  io.ConfigFlags |=
+      ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+  io.ConfigFlags |=
+      ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+  // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using
+  // Docking Branch
 
   // Setup Platform/Renderer backends
-  ImGui_ImplGlfw_InitForOpenGL(window, true);          // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
+  ImGui_ImplGlfw_InitForOpenGL(
+      window, true); // Second param install_callback=true will install GLFW
+                     // callbacks and chain to existing ones.
   if (!ImGui_ImplOpenGL3_Init("#version 330")) {
     std::cerr << "Failed to initialize ImGui OpenGL3 backend" << std::endl;
     return EXIT_FAILURE;
@@ -329,15 +312,6 @@ void Terminate() {
     quand_VAO = 0;
   }
 
-  if (skybox_VBO) {
-    glDeleteBuffers(1, &skybox_VBO);
-    skybox_VBO = 0;
-  }
-  if (skybox_VAO) {
-    glDeleteVertexArrays(1, &skybox_VAO);
-    skybox_VAO = 0;
-  }
-
   if (fbo_1) {
     glDeleteFramebuffers(1, &fbo_1);
     fbo_1 = 0;
@@ -359,10 +333,6 @@ void Terminate() {
     glDeleteTextures(1, &color_tex_2);
     color_tex_2 = 0;
   }
-  if (tex_id) {
-    glDeleteTextures(1, &tex_id);
-    tex_id = 0;
-  }
   if (tex_id_2) {
     glDeleteTextures(1, &tex_id_2);
     tex_id_2 = 0;
@@ -374,9 +344,8 @@ void Terminate() {
   if (sepia_shaper_id.GetProgram()) {
     sepia_shaper_id.Destroy();
   }
-  if (skybox_shader_id.GetProgram()) {
-    skybox_shader_id.Destroy();
-  }
+  skybox.DestroyShader();
+  skybox.DestroyBuffers();
   if (procedural_shader_id.GetProgram()) {
     procedural_shader_id.Destroy();
   }
@@ -405,7 +374,7 @@ void Render() {
   ImGui::NewFrame();
   // ImGui::ShowDemoWindow(); // Show demo window! :)
   using namespace ImGui;
-  
+
   /* Camera control window */
   Begin("Controls");
   SliderFloat("Theta", &camera.theta, -360.f, 360.f);
@@ -413,67 +382,98 @@ void Render() {
   SliderFloat("Zoom", &camera.zoom, -1.0f, 45.0f * 2.f);
   End();
 
-  /* Material control blocks*/
+  Begin("Model controls");
+
   int i = 1;
-  for (Model* model: models) {
+  for (Model *model : models) {
     std::string name = "Model " + std::to_string(i);
-    Begin(name.c_str());
+
+    BeginChild(name.c_str(), ImVec2(0, 200), true);
+
+    Text("Model %d", i);
 
     if (model->materials.empty()) {
-      TextUnformatted("No materials found for this model.");
-    }
-
-    if (BeginCombo("All instances", "Select material")) {
-      for (const tinyobj::material_t &material : model->materials) {
-        const char *materialName = material.name.empty() ? "<unnamed>" : material.name.c_str();
-        if (Selectable(materialName)) {
-          for (InstanceData &data : model->instance_data) {
-            model->SetMaterial(&data, material);
+      TextDisabled("No materials found.");
+    } else {
+      if (BeginCombo("All instances", "Select material")) {
+        for (const auto &material : model->materials) {
+          const char *label =
+              material.name.empty() ? ".." : material.name.c_str();
+          if (Selectable(label)) {
+            for (auto &data : model->instance_data)
+              model->SetMaterial(&data, material);
           }
         }
+        EndCombo();
       }
-      EndCombo();
     }
 
     Separator();
 
     for (size_t j = 0; j < model->instance_data.size(); ++j) {
-      InstanceData &child = model->instance_data[j];
-      PushID(static_cast<int>(j));
-
       std::string instanceLabel = "Instance " + std::to_string(j + 1);
+
       if (BeginCombo(instanceLabel.c_str(), "Select material")) {
-        for (const tinyobj::material_t &material : model->materials) {
-          const char *materialName = material.name.empty() ? "<unnamed>" : material.name.c_str();
-          if (Selectable(materialName)) {
-            model->SetMaterial(&child, material);
+        for (const auto &material : model->materials) {
+          const char *label =
+              material.name.empty() ? ".." : material.name.c_str();
+          if (Selectable(label)) {
+            model->SetMaterial(&model->instance_data[j], material);
+          }
+        }
+        EndCombo();
+      }
+    }
+
+    Separator();
+
+    if (model->materials.size() > 0) {
+
+      if (Button("Random material")) {
+        // taken from
+        // https://stackoverflow.com/questions/6942273/how-to-get-a-random-element-from-a-c-container
+        static std::mt19937 engine(std::random_device{}());
+        std::uniform_int_distribution<int> dist(
+            0, (int)model->materials.size() - 1);
+
+        for (auto &data : model->instance_data) {
+          model->SetMaterial(&data, model->materials[dist(engine)]);
+        }
+      }
+    }
+
+    EndChild();
+    i++;
+  }
+  End();
+
+  Begin("Skybox Controls");
+  auto keys = skybox.GetKeyCubeMap();
+
+   if (BeginCombo("Skybox", "Select skybox")) {
+        for (const auto& str : keys) {
+          const char *label = str.c_str();
+          if (Selectable(label)) {
+            skybox.ChangeCubeMap(label);
           }
         }
         EndCombo();
       }
 
-      PopID();
-    }
-
-    Separator();
-
+  if (keys.size() > 0) {    
     if (Button("Random material")) {
-      // https://cpppatterns.com/patterns/choose-random-element.html
-      for (InstanceData &data: model->instance_data) { 
-        std::random_device random_device;
-        std::mt19937 engine{random_device()};
-        std::uniform_int_distribution<int> dist(0, model->materials.size() - 1);
-        
-        tinyobj::material_t random_element = model->materials[dist(engine)]; 
-
-        model->SetMaterial(&data, random_element);
-      }
+      static std::mt19937 engine(std::random_device{}());
+      std::uniform_int_distribution<int> dist(0, (int)keys.size() - 1);
+      skybox.LoadCubemap(keys[dist(engine)]);
     }
-
-    End();
-    i++;
   }
+  
+  End();
 
+  Begin("Post-processing");
+  SliderFloat("Blur Strength", &blur_strength, 0.0f, 5.0f * 5.f);
+  SliderFloat("Sepia Intensity", &sepia_intensity, 0.0f, 1.0f * 5.f);
+  End();
   /* end of Imgui */
 
   /* beginning of camera update */
@@ -488,6 +488,7 @@ void Render() {
 
   glClearColor(0.10f, 0.10f, 0.10f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  /* end of geometry pass */
 
   /* beginning of model rendering */
   for (Model *model : models) {
@@ -496,25 +497,8 @@ void Render() {
   /* end of model rendering */
 
   /* beginning of skybox rendering */
-  glDepthFunc(GL_LEQUAL);
-  glUseProgram(skybox_shader_id.GetProgram());
-  glm::mat4 skybox_view = glm::mat4(glm::mat3(camera.view));
-  glUniformMatrix4fv(
-      glGetUniformLocation(skybox_shader_id.GetProgram(), "view"), 1,
-      GL_FALSE, &skybox_view[0][0]);
-  glUniformMatrix4fv(
-      glGetUniformLocation(skybox_shader_id.GetProgram(), "proj"), 1,
-      GL_FALSE, &camera.proj[0][0]);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, tex_id);
-  glUniform1i(glGetUniformLocation(skybox_shader_id.GetProgram(), "skybox"),
-              0);
-  glBindVertexArray(skybox_VAO);
-  glDrawArrays(GL_TRIANGLES, 0, 36);
-  glBindVertexArray(0);
-  glDepthFunc(GL_LESS);
+  skybox.Draw();
   /* end of skybox rendering */
-  /* end of geometry pass */
 
   /* beginning of blur pass */
   glBindFramebuffer(GL_FRAMEBUFFER, fbo_2);
@@ -528,9 +512,8 @@ void Render() {
   glUniform1f(glGetUniformLocation(blur_shader_id.GetProgram(), "offset_y"),
               1.0f / APP_WINDOW_HEIGHT);
 
-  float blur_i = 1.2f;
   glUniform1f(glGetUniformLocation(blur_shader_id.GetProgram(), "strength"),
-              blur_i);
+              blur_strength);
 
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, color_tex_1);
@@ -547,7 +530,7 @@ void Render() {
 
   glUseProgram(sepia_shaper_id.GetProgram());
   glUniform1f(glGetUniformLocation(sepia_shaper_id.GetProgram(), "intensity"),
-              0.5f);
+              sepia_intensity);
   glUniform1f(glGetUniformLocation(sepia_shaper_id.GetProgram(), "noise_mix"),
               0.20f);
   glActiveTexture(GL_TEXTURE0);
@@ -587,42 +570,6 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
   (void)xoffset;
   camera.Zoom((float)yoffset);
 }
-
-GLuint LoadCubemap(const vector<std::string> &faces)
-{
-  /* beginning of cubemap loading */
-    unsigned int textureID;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-
-    int width, height, nrChannels;
-  stbi_set_flip_vertically_on_load(false);
-    for (unsigned int i = 0; i < faces.size(); i++)
-    {
-        unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
-        if (data)
-        {
-      GLenum format = nrChannels == 4 ? GL_RGBA : GL_RGB;
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
-             0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data
-            );
-            stbi_image_free(data);
-        }
-        else
-        {
-            std::cout << "Cubemap tex failed to load at path: " << faces[i] << std::endl;
-            stbi_image_free(data);
-        }
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    /* end of cubemap loading */
-    return textureID;
-}  
 
 int main(int argc, char *argv[]) {
   if (!Initialize()) {
